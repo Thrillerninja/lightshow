@@ -6,8 +6,18 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+chrono = "0.4.38"
 image = "0.25.2"
 log = "0.4.22"
 scrap = "0.5.0"
 serialport = "4.5.1"
 simplelog = "0.12.2"
+winapi = { version = "0.3.9" }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8.19"
+regex = "1.10.6"
+rayon = "1.10.0"
+reqwest = { version = "0.12.7", features = ["json", "blocking"] }
+serde_json = "1.0.128"
+tokio = "1.40.0"
+futures = "0.3.30"
