@@ -79,7 +79,7 @@ pub struct Size {
 #[derive(Debug, Deserialize, Clone)]
 pub struct LED {
     #[serde(skip)]
-    pub name: String,
+    pub index: i32,
     pub IsEnabled: bool,
     pub Position: Position,
     pub Size: Size,
@@ -110,7 +110,7 @@ impl Config {
                     None
                 } else {
                     Some(LED {
-                        name: key,
+                        index: key.trim_start_matches("LED_").parse().unwrap_or(self.leds_array.len() as i32),
                         IsEnabled: value.IsEnabled,
                         Position: value.Position,
                         Size: value.Size,

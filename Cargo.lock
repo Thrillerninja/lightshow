@@ -915,6 +915,7 @@ dependencies = [
  "serde_json",
  "serialport",
  "simplelog",
+ "time",
  "tokio",
  "toml",
  "winapi 0.3.9",

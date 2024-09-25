@@ -10,15 +10,15 @@ use crate::hardware_interaction::capture_screenshot;
 // Define the Color struct
 #[derive(Debug, Clone)]
 pub struct Color {
-    pub name: String,
+    pub led_index: i32,
     pub r: u8,
     pub g: u8,
     pub b: u8,
 }
 impl Color {
 
-    pub fn new(name: String, r: u8, g: u8, b: u8) -> Self {
-        Color { name, r, g, b }
+    pub fn new(led_index: i32, r: u8, g: u8, b: u8) -> Self {
+        Color { led_index, r, g, b }
     }
 
     pub fn to_hex(&self) -> String {
@@ -37,19 +37,19 @@ fn save_screenshot(image: &RgbaImage, path: &str) -> Result<(), Box<dyn std::err
 
 pub fn capture_and_process_edge_color(config: &Config) -> Result<Vec<Color>, Box<dyn std::error::Error>> {
     let (screenshot_img, min_x, min_y, max_x, max_y) = capture_screenshot()?;
-    save_screenshot(&screenshot_img, "screenshot.png")?;
-
-    log::info!("Border started");
-    if let Err(e) = save_config_border_img(&screenshot_img, min_x, min_y, max_x, max_y, config) {
-        log::error!("Failed to save border image: {}", e);
-    } else {
-        log::info!("Border image saved");
-    }
+    //save_screenshot(&screenshot_img, "screenshot.png")?;
+//
+    //log::info!("Border started");
+    //if let Err(e) = save_config_border_img(&screenshot_img, min_x, min_y, max_x, max_y, config) {
+    //    log::error!("Failed to save border image: {}", e);
+    //} else {
+    //    log::info!("Border image saved");
+    //}
 
     let avg_colors = calculate_avg_colors(&screenshot_img, min_x, min_y, max_x, max_y, config)?;
     log::info!("Average colors calculated");
 
-    save_screenshot_with_avg_colors(&screenshot_img, config, &avg_colors, "screenshot_avg_colors.png", min_x, min_y, max_x, max_y)?;
+    //save_screenshot_with_avg_colors(&screenshot_img, config, &avg_colors, "screenshot_avg_colors.png", min_x, min_y, max_x, max_y)?;
     
     Ok(avg_colors)
 }
@@ -138,18 +138,16 @@ fn calculate_avg_colors(image: &RgbaImage, min_x: i32, min_y: i32, max_x: i32, m
         
         if count != 0 {
             Color::new(
-                led.name.clone(),
-                ((r_sum / count) as f32 * (1./led.CoefRed)) as u8, 
-                ((g_sum / count) as f32 * (1./led.CoefGreen)) as u8, 
-                ((b_sum / count) as f32 * (1./led.CoefBlue)) as u8)
+                led.index.clone(),
+                ((r_sum / count) as f32) as u8, // * (1./led.CoefRed)
+                ((g_sum / count) as f32) as u8, // * (1./led.CoefGreen)
+                ((b_sum / count) as f32) as u8) // * (1./led.CoefBlue)
         } else {
-            Color::new(led.name.clone(), 0, 0, 0) // Default to black if no pixels are counted
+            Color::new(led.index.clone(), 0, 0, 0) // Default to black if no pixels are counted
         }
         
     }).collect();
-
-    //let avg_colors = Arc::try_unwrap(avg_colors).expect("Average colors still has multiple references").into_inner().unwrap();
-
+    
     Ok(avg_colors)
 }
 
@@ -169,7 +167,7 @@ fn save_screenshot_with_avg_colors(
     config.leds_array.clone().par_iter().enumerate().for_each(|(i,led)| {
         let position = (led.Position.x, led.Position.y);
         let size = (led.Size.width, led.Size.height);
-        let color = Color::new(led.name.clone(), avg_colors[i].r, avg_colors[i].g, avg_colors[i].b);
+        let color = Color::new(led.index.clone(), avg_colors[i].r, avg_colors[i].g, avg_colors[i].b);
 
         for x in 0..size.0 {
             for y in 0..size.1 {
