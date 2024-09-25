@@ -106,6 +106,14 @@ pub fn capture_screenshot() -> Result<(RgbaImage, i32, i32, i32, i32), Box<dyn s
         );
     }
 
+    // Convert from BGRA to RGBA
+    for chunk in pixels.chunks_exact_mut(4) {
+        let b = chunk[0];
+        let r = chunk[2];
+        chunk[0] = r; // swap B and R
+        chunk[2] = b;
+    }
+
     let image = ImageBuffer::<image::Rgba<u8>, _>::from_raw(
         total_width as u32,
         total_height as u32,
@@ -119,5 +127,5 @@ pub fn capture_screenshot() -> Result<(RgbaImage, i32, i32, i32, i32), Box<dyn s
         ReleaseDC(null_mut(), hdc_screen);
     }
 
-    Ok((image, min_x, min_y, max_x, max_y))
+    Ok((image, min_x, min_y, total_width, total_height))
 }

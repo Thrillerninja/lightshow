@@ -105,14 +105,20 @@ impl Config {
     pub fn convert_leds_to_array(&mut self) {
         self.leds_array = self.leds
             .drain()
-            .map(|(key, value)| LED {
-                name: key,
-                IsEnabled: value.IsEnabled,
-                Position: value.Position,
-                Size: value.Size,
-                CoefRed: value.CoefRed,
-                CoefGreen: value.CoefGreen,
-                CoefBlue: value.CoefBlue,
+            .filter_map(|(key, value)| {
+                if value.CoefRed == 1.0 && value.CoefGreen == 1.0 && value.CoefBlue == 1.0 {
+                    None
+                } else {
+                    Some(LED {
+                        name: key,
+                        IsEnabled: value.IsEnabled,
+                        Position: value.Position,
+                        Size: value.Size,
+                        CoefRed: value.CoefRed,
+                        CoefGreen: value.CoefGreen,
+                        CoefBlue: value.CoefBlue,
+                    })
+                }
             })
             .collect();
     }
@@ -173,6 +179,7 @@ pub fn read_config(file_path: &str) -> Result<Config, Box<dyn std::error::Error>
 
     // Convert the HashMap to a Vec to enable parallel processing
     config.convert_leds_to_array();
+
     log::info!("Config loaded");
     Ok(config)
 }
