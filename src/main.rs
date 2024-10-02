@@ -25,8 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    loop{
-      
+    loop{      
       let start = Instant::now();
       // Get the average colors of the border
       let result = screen_capture::capture_and_process_edge_color(&config);
@@ -50,6 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       let duration = start.elapsed();
       log::info!("Iteration finished in {:?}", duration);
     }
+    Ok(())
 }
 
 

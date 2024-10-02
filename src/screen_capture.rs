@@ -36,7 +36,9 @@ fn save_screenshot(image: &RgbaImage, path: &str) -> Result<(), Box<dyn std::err
 
 
 pub fn capture_and_process_edge_color(config: &Config) -> Result<Vec<Color>, Box<dyn std::error::Error>> {
+    let start = std::time::Instant::now();
     let (screenshot_img, min_x, min_y, max_x, max_y) = capture_screenshot()?;
+    log::info!("Screenshot captured in {:?}", start.elapsed());
     //save_screenshot(&screenshot_img, "screenshot.png")?;
 //
     //log::info!("Border started");

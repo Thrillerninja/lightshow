@@ -1,4 +1,9 @@
 use image::{ImageBuffer, RgbaImage};
+use rusty_duplication::{
+    capturer::model::Capturer,
+    manager::Manager,
+    utils::{FrameInfoExt, OutputDescExt},
+  };
 use winapi::um::winuser::{GetDC, ReleaseDC};
 use winapi::um::wingdi::{CreateCompatibleDC, CreateCompatibleBitmap, SelectObject, BitBlt, GetDIBits, DeleteObject, DeleteDC, SRCCOPY, BI_RGB, BITMAPINFO, BITMAPINFOHEADER};
 use winapi::shared::windef::HDC;
@@ -42,6 +47,7 @@ pub fn get_monitor_info() -> Vec<MonitorInfo> {
 }
 
 pub fn capture_screenshot() -> Result<(RgbaImage, i32, i32, i32, i32), Box<dyn std::error::Error>> {
+    let start = std::time::Instant::now();
     let hdc_screen = unsafe { GetDC(null_mut()) };
     let hdc_mem = unsafe { CreateCompatibleDC(hdc_screen) };
 
@@ -59,6 +65,8 @@ pub fn capture_screenshot() -> Result<(RgbaImage, i32, i32, i32, i32), Box<dyn s
 
     let hbitmap = unsafe { CreateCompatibleBitmap(hdc_screen, total_width, total_height) };
     unsafe { SelectObject(hdc_mem, hbitmap as _) };
+
+    log::info!("Screenshot preparation finished in {:?}", start.elapsed());
 
     for monitor in &monitor_info {
         unsafe {
@@ -105,6 +113,7 @@ pub fn capture_screenshot() -> Result<(RgbaImage, i32, i32, i32, i32), Box<dyn s
             0,
         );
     }
+    log::info!("Screenshot captured in {:?}", start.elapsed());
 
     // Convert from BGRA to RGBA
     for chunk in pixels.chunks_exact_mut(4) {
@@ -126,6 +135,8 @@ pub fn capture_screenshot() -> Result<(RgbaImage, i32, i32, i32, i32), Box<dyn s
         DeleteDC(hdc_mem);
         ReleaseDC(null_mut(), hdc_screen);
     }
+
+    log::info!("Screenshot processed in {:?}", start.elapsed());
 
     Ok((image, min_x, min_y, total_width, total_height))
 }
