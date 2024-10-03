@@ -1,9 +1,10 @@
-use image::{ImageBuffer, Rgba, RgbaImage};
+use image::{GenericImage, GenericImageView, ImageBuffer, Rgba, RgbaImage};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use crate::config::{Config, LED};
 use crate::hardware_interaction::{FrameData, SlimMonitorInfo};
@@ -104,7 +105,9 @@ pub fn save_config_border_img(
 }
 
 
-pub fn combine_screens(value: &Vec<SlimMonitorInfo>, combined_monitor_width: u32, combined_monitor_height: u32, thread_num: u32, min_x: i32, min_y: i32) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>, Box<dyn std::error::Error>> {     
+pub fn combine_screens(value: &Vec<SlimMonitorInfo>, combined_monitor_width: u32, combined_monitor_height: u32, thread_num: u32, min_x: i32, min_y: i32) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>, Box<dyn std::error::Error>> {
+    let start_time = Instant::now();
+
     let mut combined_img: ImageBuffer<Rgba<u8>, Vec<u8>> = RgbaImage::new(combined_monitor_width, combined_monitor_height);
 
     // Lock the map briefly to copy the frame data, then release the lock
@@ -115,33 +118,26 @@ pub fn combine_screens(value: &Vec<SlimMonitorInfo>, combined_monitor_width: u32
 
     // Process the copied frame data
     for (i, monitor) in value.iter().enumerate() {
-    if let Some(frame_data) = frame_data_copy.get(&(i as i32)) {
+        if let Some(frame_data) = frame_data_copy.get(&(i as i32)) {
+            let position: (i32, i32) = (monitor.pos_x, monitor.pos_y);
 
-        let position: (i32, i32) = (monitor.pos_x, monitor.pos_y);
-
-        if let Some(img) = RgbaImage::from_raw(monitor.width as u32, monitor.height as u32, frame_data.data.clone()) {
-        for x in 0..img.width() {
-            for y in 0..img.height() {
-
-            // Calculate pixel positions relative to the screen
-            let pixel_x = (position.0 + x as i32 - min_x) as i32;
-            let pixel_y = (position.1 + y as i32 - min_y) as i32;
-
-            //if i == 0 {
-            //  combined_img.put_pixel(pixel_x as u32, pixel_y as u32, image::Rgba([255, 0, 0, 255]));
-            //} else if i == 1 {
-            //  combined_img.put_pixel(pixel_x as u32, pixel_y as u32, image::Rgba([0, 255, 0, 255]));
-            //} else if i == 2 {
-            //  combined_img.put_pixel(pixel_x as u32, pixel_y as u32, image::Rgba([0, 0, 255, 255]));
-            //}
-            combined_img.put_pixel(pixel_x as u32, pixel_y as u32, *img.get_pixel(x, y));
+            if let Some(img) = RgbaImage::from_raw(monitor.width as u32, monitor.height as u32, frame_data.data.clone()) {
+                let (img_width, img_height) = img.dimensions();
+                // Use bulk pixel setting if possible
+                    //let row_start = (position.1 + y as i32 - min_y) as u32 * combined_monitor_width;
+                    //let row_pixels = img.view(0, y, img_width, 1).to_image();
+                    // Ensure the subtraction does not result in a negative value
+                //let x_offset = (position.0 - min_x).min(min_x as u32 + 1) as u32;
+                combined_img.copy_from(&img, monitor.pos_x as u32, monitor.pos_y as u32)?;
+            } else {
+                log::error!("Failed to create image from frame data");
             }
         }
-        } else {
-            log::error!("Failed to create image from frame data");
-        }
     }
-    }
+
+    let duration = start_time.elapsed();
+    log::info!("combine_screens took: {:?}", duration);
+
     Ok(combined_img)
 }
 

@@ -157,17 +157,8 @@ impl GraphicsCaptureApiHandler for Capture {
 
         io::stdout().flush()?;
 
-        // Stop the capture after 6 seconds
-        //if self.start.elapsed() >= Duration::from_secs(15) {
-        //    // Finish the encoder and save the video.
-        //    if let Some(encoder) = self.encoder.take() {
-        //        encoder.finish()?;
-        //    }
-        //    capture_control.stop();
-//
-        //    // Because there wasn't any new lines in previous prints
-        //    log::info!("Monitor {}:: Capture stopped after 6 seconds.", self.flags);
-        //}
+        // Sleep for a short time to avoid high CPU usage
+        thread::sleep(Duration::from_millis(10));
 
         Ok(())
     }
