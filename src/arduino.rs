@@ -107,7 +107,7 @@ pub fn set_pixels(web_address: &str, pixels: Vec<Color>) -> Result<(), Box<dyn E
     Ok(())
 }
 
-fn send_pixel_array(web_address: &str, formatted_pixels: &[serde_json::Value]) -> Result<(), Box<dyn Error>> {
+pub fn send_pixel_array(web_address: &str, formatted_pixels: &[serde_json::Value]) -> Result<(), Box<dyn Error>> {
 
     let url = format!("http://{}/json/state", web_address);
 

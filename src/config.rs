@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fs::{self};
 use regex::Regex;
 
@@ -61,7 +61,7 @@ pub struct Device {
 }
 
 #[allow(unused)]
-#[derive(Debug, Deserialize, Copy, Clone)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub struct Position {
     pub x: i32,
     pub y: i32,
@@ -69,14 +69,14 @@ pub struct Position {
 
 
 #[allow(unused)]
-#[derive(Debug, Deserialize, Copy, Clone)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub struct Size {
     pub width: i32,
     pub height: i32,
 }
 
 #[allow(non_snake_case, unused)]
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LED {
     #[serde(skip)]
     pub index: i32,
