@@ -60,8 +60,6 @@ pub struct FrameData {
 
 // This struct will be used to handle the capture events.
 pub struct Capture {
-    // The video encoder that will be used to encode the frames.
-    encoder: Option<VideoEncoder>,
     // To measure the time the capture has been running
     start: Instant,
     // To count the number of frames captured
@@ -81,15 +79,7 @@ impl GraphicsCaptureApiHandler for Capture {
 
     // Function that will be called to create the struct. The flags can be passed from settings.
     fn new(flags: Self::Flags) -> Result<Self, Self::Error> {        
-        let encoder = VideoEncoder::new(
-            VideoSettingsBuilder::new(1920, 1080),
-            AudioSettingsBuilder::default().disabled(true),
-            ContainerSettingsBuilder::default(),
-            format!("video{}.mp4", flags),
-        )?;
-
         Ok(Self {
-            encoder: Some(encoder),
             start: Instant::now(),
             frame_count: 0,
             last_fps_log: Instant::now(),

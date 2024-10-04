@@ -104,10 +104,8 @@ fn process_frames_setup_map(monitors: Vec<SlimMonitorInfo>) -> Vec<thread::JoinH
           loop {
               let loop_start = Instant::now(); // Start timing the loop
 
-              let combined_img_start = Instant::now();
               let combined_img = combine_screens(&value, combined_monitor_width as u32, combined_monitor_height as u32, thread_num as u32, min_x, min_y).unwrap();
-              log::info!("Thread {}:: Combined image creation took: {:?}", thread_num, combined_img_start.elapsed());
-
+              
               let avg_colors_start = Instant::now();
               let mut avg_colors = calculate_avg_colors(&combined_img, min_x, min_y, max_x, max_y, &CONFIG.leds_array).unwrap();
               let avg_colors_duration = avg_colors_start.elapsed();

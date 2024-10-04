@@ -115,19 +115,12 @@ pub fn combine_screens(value: &Vec<SlimMonitorInfo>, combined_monitor_width: u32
         let frame_map = FRAME_MAP.lock().unwrap();
         frame_map.clone() // Clone the map contents
     };
+    log::info!("Thread {}:: Frame data copy took: {:?}", thread_num, start_time.elapsed());
 
     // Process the copied frame data
     for (i, monitor) in value.iter().enumerate() {
         if let Some(frame_data) = frame_data_copy.get(&(i as i32)) {
-            let position: (i32, i32) = (monitor.pos_x, monitor.pos_y);
-
             if let Some(img) = RgbaImage::from_raw(monitor.width as u32, monitor.height as u32, frame_data.data.clone()) {
-                let (img_width, img_height) = img.dimensions();
-                // Use bulk pixel setting if possible
-                    //let row_start = (position.1 + y as i32 - min_y) as u32 * combined_monitor_width;
-                    //let row_pixels = img.view(0, y, img_width, 1).to_image();
-                    // Ensure the subtraction does not result in a negative value
-                //let x_offset = (position.0 - min_x).min(min_x as u32 + 1) as u32;
                 combined_img.copy_from(&img, monitor.pos_x as u32, monitor.pos_y as u32)?;
             } else {
                 log::error!("Failed to create image from frame data");
@@ -135,9 +128,7 @@ pub fn combine_screens(value: &Vec<SlimMonitorInfo>, combined_monitor_width: u32
         }
     }
 
-    let duration = start_time.elapsed();
-    log::info!("combine_screens took: {:?}", duration);
-
+    log::info!("Thread {}:: Combined image creation took: {:?}", thread_num, start_time.elapsed());
     Ok(combined_img)
 }
 
