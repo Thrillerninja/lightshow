@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let settings = Settings::new(
                 monitor_handle,
                 CursorCaptureSettings::Default,
-                DrawBorderSettings::Default,
+                DrawBorderSettings::WithoutBorder,
                 ColorFormat::Rgba8,
                 i.to_string(),
             );
@@ -136,7 +136,7 @@ fn process_frames_setup_map(monitors: Vec<SlimMonitorInfo>) -> Vec<thread::JoinH
               }
 
               let loop_duration = loop_start.elapsed();
-              log::info!("Thread {}:: Loop iteration took: {:?}", thread_num, loop_duration);
+              log::warn!("Thread {}:: Loop iteration took: {:?}", thread_num, loop_duration);
 
               // Sleep briefly to avoid high CPU usage
               //thread::sleep(Duration::from_millis(1000));

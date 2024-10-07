@@ -3,6 +3,7 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIter
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::Path;
+use std::ptr::copy_nonoverlapping;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -104,7 +105,6 @@ pub fn save_config_border_img(
     Ok(())
 }
 
-
 pub fn combine_screens(value: &Vec<SlimMonitorInfo>, combined_monitor_width: u32, combined_monitor_height: u32, thread_num: u32, min_x: i32, min_y: i32) -> Result<ImageBuffer<Rgba<u8>, Vec<u8>>, Box<dyn std::error::Error>> {
     let start_time = Instant::now();
 
@@ -115,24 +115,40 @@ pub fn combine_screens(value: &Vec<SlimMonitorInfo>, combined_monitor_width: u32
         let frame_map = FRAME_MAP.lock().unwrap();
         frame_map.clone() // Clone the map contents
     };
-    log::info!("Thread {}:: Frame data copy took: {:?}", thread_num, start_time.elapsed());
+    //log::info!("Thread {}:: Frame data copy took: {:?}", thread_num, start_time.elapsed());
 
     // Process the copied frame data
     for (i, monitor) in value.iter().enumerate() {
         if let Some(frame_data) = frame_data_copy.get(&(i as i32)) {
-            if let Some(img) = RgbaImage::from_raw(monitor.width as u32, monitor.height as u32, frame_data.data.clone()) {
-                combined_img.copy_from(&img, monitor.pos_x as u32, monitor.pos_y as u32)?;
-            } else {
-                log::error!("Failed to create image from frame data");
+            let position: (i32, i32) = (monitor.pos_x, monitor.pos_y);
+
+            // Ensure the subtraction does not result in a negative value
+            let x_offset = (position.0 - min_x).max(0) as u32;
+            let y_offset = (position.1 - min_y).max(0) as u32;
+
+            let img_width = monitor.width as u32;
+            let img_height = monitor.height as u32;
+
+            // Direct buffer copy using copy_from_slice
+            for y in 0..img_height {
+                let src_start = (y * img_width * 4) as usize;
+                let src_end = src_start + (img_width * 4) as usize;
+                let dest_start = ((y_offset + y) * combined_monitor_width * 4 + x_offset * 4) as usize;
+
+                unsafe {
+                    let src_ptr = frame_data.data.as_ptr().add(src_start);
+                    let dest_ptr = combined_img.as_mut_ptr().add(dest_start);
+                    copy_nonoverlapping(src_ptr, dest_ptr, src_end - src_start);
+                }
             }
+
+            //log::info!("Thread {}:: Image {} copied successfully in {:?}", thread_num, i, start_time.elapsed());
         }
     }
 
     log::info!("Thread {}:: Combined image creation took: {:?}", thread_num, start_time.elapsed());
     Ok(combined_img)
 }
-
-
 
 pub fn calculate_avg_colors(image: &RgbaImage, min_x: i32, min_y: i32, max_x: i32, max_y: i32, leds_array: &Vec<LED>) -> Result<Vec<Color>, Box<dyn std::error::Error>> {
 
