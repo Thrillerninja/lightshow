@@ -1,24 +1,16 @@
 use std::{
-    io::{self, Write}, mem::zeroed, sync::{Arc, Mutex}, thread, time::{Duration, Instant}
+    io::{self, Write}, mem::zeroed, thread, time::{Duration, Instant}
 };
-
-use concurrent_queue::ConcurrentQueue;
-use image::RgbaImage;
-use windows_capture::frame::ImageFormat;
-use log::{error, info};
-use once_cell::sync::Lazy;
 use windows_capture::{
     capture::GraphicsCaptureApiHandler,
-    encoder::{AudioSettingsBuilder, ContainerSettingsBuilder, VideoEncoder, VideoSettingsBuilder},
     frame::Frame,
     graphics_capture_api::InternalCaptureControl,
     monitor::Monitor,
-    settings::{ColorFormat, CursorCaptureSettings, DrawBorderSettings, Settings},
 };
 
 use winapi::um::winuser::{GetMonitorInfoW, MONITORINFOEXW};
 
-use crate::{arduino, config::{Config, LED}, screen_capture::process_edge_color, FRAME_QUEUE, FRAME_MAP};
+use crate::FRAME_MAP;
 
 // Struct to hold monitor information
 #[derive(Debug, Clone)]
@@ -28,6 +20,17 @@ pub struct MonitorInfo {
     pub pos_y: i32,
     pub width: i32,
     pub height: i32,
+}
+
+// Function to parse flags from a string
+fn parse_flags(flags: &str) -> Result<(i32, u32), Box<dyn std::error::Error>> {
+    let parts: Vec<&str> = flags.split(',').collect();
+    if parts.len() != 2 {
+        return Err("Invalid flags format".into());
+    }
+    let id = parts[0].trim().parse::<i32>()?;
+    let fps_limit = parts[1].trim().parse::<u32>()?;
+    Ok((id, fps_limit))
 }
 
 #[derive(Debug, Clone)]
@@ -53,21 +56,23 @@ impl MonitorInfo {
 #[derive(Debug, Clone)]
 pub struct FrameData {
     pub data: Vec<u8>,
-    pub width: u32,
-    pub height: u32,
 }
 
 
 // This struct will be used to handle the capture events.
 pub struct Capture {
+    // Monitor ID
+    id: i32,
     // To measure the time the capture has been running
-    start: Instant,
+    process_time: Instant,
+    // To measure the time between frames
+    frame_time: Instant,
     // To count the number of frames captured
     frame_count: u32,
     // To track the last time FPS was logged
     last_fps_log: Instant,
-    // Flags to identify the monitor
-    flags: i32,
+    // Desired FPS limit
+    fps_limit: u32,
 }
 
 impl GraphicsCaptureApiHandler for Capture {
@@ -79,19 +84,28 @@ impl GraphicsCaptureApiHandler for Capture {
 
     // Function that will be called to create the struct. The flags can be passed from settings.
     fn new(flags: Self::Flags) -> Result<Self, Self::Error> {        
-        Ok(Self {
-            start: Instant::now(),
-            frame_count: 0,
-            last_fps_log: Instant::now(),
-            flags: flags.parse().unwrap(),
-        })
+        let flags = match parse_flags(&flags) {
+            Ok(f) => f,
+            Err(_e) => (0, 10),
+        };
+        
+        Ok(            
+            Self {
+                id: flags.0,
+                process_time: Instant::now(),
+                frame_time: Instant::now(),
+                frame_count: 0,
+                last_fps_log: Instant::now(),
+                fps_limit: flags.1,
+            }
+        )
     }
 
     // Called every time a new frame is available.
     fn on_frame_arrived(
         &mut self,
         frame: &mut Frame,
-        capture_control: InternalCaptureControl,
+        _capture_control: InternalCaptureControl,
     ) -> Result<(), Self::Error> {
         // Increment the frame count
         self.frame_count += 1;
@@ -102,21 +116,20 @@ impl GraphicsCaptureApiHandler for Capture {
         // If more than a second has passed, log the FPS
         if elapsed_since_last_log >= Duration::from_secs(1) {
             let fps = self.frame_count as f64 / elapsed_since_last_log.as_secs_f64();
-            log::info!("Monitor {}:: FPS: {:.2}", self.flags, fps);
-            // Print recording duration every frame (optional)
-            log::info!("Monitor {}:: Recording for: {} seconds", 
-                self.flags,
-                self.start.elapsed().as_secs()
-            );
+            log::warn!("Monitor {}:: FPS: {:.2}", self.id, fps);
 
-            io::stdout().flush()?;
+            if self.id == 0 {
+                // Print recording
+                log::warn!("Monitor {}:: Recording for: {} seconds", 
+                    self.id,
+                    self.process_time.elapsed().as_secs()
+                );
+            }
 
             // Reset frame count and update last FPS log time
             self.frame_count = 0;
             self.last_fps_log = Instant::now();
-        }
-
-        
+        }        
 
         // ---------- Processing the frame ----------
         // ---------- Enqueue the frame ----------
@@ -130,32 +143,39 @@ impl GraphicsCaptureApiHandler for Capture {
             };
             let frame_data = FrameData {
                 data: frame_bytes,
-                width: frame.width(),
-                height: frame.height(),
             };
-            //FRAME_QUEUE.push(frame_data).ok(); // Enqueue the frame
             if let Ok(mut map) = FRAME_MAP.lock() {
-                map.insert(self.flags.clone(), frame_data);
+                map.insert(self.id.clone(), frame_data);
             } else {
                 log::error!("Failed to lock FRAME_MAP");
             }
         }
 
-        frame.save_as_image(&format!("frame_{}.png", self.flags), ImageFormat::Png)?;
-
-        // ---------- End of processing the frame ----------
-
+        // ---------- End of processing the frame / cleanup ----------
         io::stdout().flush()?;
 
+        // ---------- FPS Limiting ----------
         // Sleep for a short time to avoid high CPU usage
-        thread::sleep(Duration::from_millis(10));
+        if self.fps_limit > 0 {
+            // Calc remaining frame time
+            let elapsed = self.frame_time.elapsed();
+            let frame_duration = Duration::from_secs_f32(1.0 / self.fps_limit as f32);
+            if let Some(remaining) = frame_duration.checked_sub(elapsed) {
+                if remaining.as_secs_f32() > 0.0 {
+                    thread::sleep(remaining);
+                    log::warn!("Monitor {}:: Remaining: {:?}", self.id, remaining);
+                }
+            }
+            // Reset frame time after sleeping
+            self.frame_time = Instant::now();
+        }
 
         Ok(())
     }
 
     // Optional handler called when the capture item (usually a window) closes.
     fn on_closed(&mut self) -> Result<(), Self::Error> {
-        log::info!("Monitor {}:: Capture Session Closed", self.flags);
+        log::info!("Monitor {}:: Capture Session Closed", self.id);
         Ok(())
     }
 }

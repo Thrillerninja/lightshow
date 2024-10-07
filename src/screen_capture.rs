@@ -152,6 +152,8 @@ pub fn combine_screens(value: &Vec<SlimMonitorInfo>, combined_monitor_width: u32
 
 pub fn calculate_avg_colors(image: &RgbaImage, min_x: i32, min_y: i32, max_x: i32, max_y: i32, leds_array: &Vec<LED>) -> Result<Vec<Color>, Box<dyn std::error::Error>> {
 
+    let scaling = 4; // Scaling factor for the image
+
     let avg_colors: Vec<Color> = leds_array.par_iter().map(|led| {        
         let mut r_sum = 0;
         let mut g_sum = 0;
@@ -160,21 +162,20 @@ pub fn calculate_avg_colors(image: &RgbaImage, min_x: i32, min_y: i32, max_x: i3
 
         let position = (led.Position.x, led.Position.y);
         let size = (led.Size.width, led.Size.height);
-        for x in 0..size.0 {
-            for y in 0..size.1 {
-                // Calculate pixel positions relative to the screen and clamp to valid image area
-                let pixel_x = (position.0 + x - min_x) as i32;
-                let pixel_y = (position.1 + y - min_y) as i32;
+        // Use a single loop to iterate over the pixels
+        for y in (0..size.1).step_by(scaling) {
+            let pixel_y = (position.1 + y - min_y) as i32;
+            if pixel_y < 0 || pixel_y >= max_y as i32 {
+                continue;
+            }
 
-                // Skip out-of-bounds pixels entirely
-                if pixel_x < 0 || pixel_y < 0 || pixel_x >= max_x as i32 || pixel_y >= max_y as i32 {
+            for x in (0..size.0).step_by(scaling) {
+                let pixel_x = (position.0 + x - min_x) as i32;
+                if pixel_x < 0 || pixel_x >= max_x as i32 {
                     continue;
                 }
 
-                let pixel = image.get_pixel(
-                        pixel_x as u32,
-                        pixel_y as u32
-                    );
+                let pixel = image.get_pixel(pixel_x as u32, pixel_y as u32);
                 r_sum += pixel[0] as u32;
                 g_sum += pixel[1] as u32;
                 b_sum += pixel[2] as u32;
@@ -185,9 +186,9 @@ pub fn calculate_avg_colors(image: &RgbaImage, min_x: i32, min_y: i32, max_x: i3
         if count != 0 {
             Color::new(
                 led.index.clone(),
-                ((r_sum / count) as f32) as u8, // * (1./led.CoefRed)
-                ((g_sum / count) as f32) as u8, // * (1./led.CoefGreen)
-                ((b_sum / count) as f32) as u8) // * (1./led.CoefBlue)
+                (r_sum / count) as u8, // * (1./led.CoefRed)
+                (g_sum / count) as u8, // * (1./led.CoefGreen)
+                (b_sum / count) as u8) // * (1./led.CoefBlue)
         } else {
             Color::new(led.index.clone(), 0, 0, 0) // Default to black if no pixels are counted
         }

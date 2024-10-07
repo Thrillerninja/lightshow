@@ -4,21 +4,15 @@ mod arduino;
 mod logger;
 mod config;
 mod hardware_interaction;
-use concurrent_queue::ConcurrentQueue;
 use hardware_interaction::{get_monitor_info, SlimMonitorInfo};
 use once_cell::sync::Lazy;
-use screen_capture::{calculate_avg_colors, combine_screens, save_screenshot_with_avg_colors};
+use screen_capture::{calculate_avg_colors, combine_screens};
 use windows_capture::{
   capture::GraphicsCaptureApiHandler,
   monitor::Monitor,
   settings::{ColorFormat, CursorCaptureSettings, DrawBorderSettings, Settings},
 };
 use crate::hardware_interaction::{FrameData, Capture};
-
-// Define a global, thread-safe queue
-static FRAME_QUEUE: Lazy<Arc<ConcurrentQueue<FrameData>>> = Lazy::new(|| {
-  Arc::new(ConcurrentQueue::unbounded())
-});
 
 static FRAME_MAP: Lazy<Arc<Mutex<HashMap<i32, FrameData>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
@@ -31,9 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   // Initialize logging (optional)
   logger::init_logger()?;
 
-  // Clone the queue for the processing thread
-  //let processing_queue = Arc::clone(&FRAME_QUEUE);
-  //let processing_map = Arc::clone(&FRAME_MAP);
+  let target_fps = 24;
 
   // Retrieve monitor information (if needed)
   let monitors = get_monitor_info()?;
@@ -41,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   // Start the processing thread
   let processing_start = Instant::now();
-  let processing_handle = process_frames_setup_map(monitors.clone().into_iter().map(|m| m.export()).collect());
+  let processing_handle = process_frames_setup_map(monitors.clone().into_iter().map(|m| m.export()).collect(), target_fps);
   let processing_duration = processing_start.elapsed();
   println!("Processing thread setup took: {:?}", processing_duration);
 
@@ -56,7 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 CursorCaptureSettings::Default,
                 DrawBorderSettings::WithoutBorder,
                 ColorFormat::Rgba8,
-                i.to_string(),
+                format!("{},{}", i, target_fps),
             );
 
             // Start the capture and handle potential failures
@@ -85,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn process_frames_setup_map(monitors: Vec<SlimMonitorInfo>) -> Vec<thread::JoinHandle<()>> {
+fn process_frames_setup_map(monitors: Vec<SlimMonitorInfo>, target_fps: u32) -> Vec<thread::JoinHandle<()>> {
   let num_threads = 1; // Number of threads for processing
   let mut handles = Vec::with_capacity(num_threads);
 
@@ -95,52 +87,57 @@ fn process_frames_setup_map(monitors: Vec<SlimMonitorInfo>) -> Vec<thread::JoinH
   for thread_num in 0..num_threads {
       let value: Vec<SlimMonitorInfo> = monitors.clone();
       let handle = thread::spawn(move || {
-          let min_x = value.iter().map(|mi| mi.pos_x).min().unwrap_or(0);
-          let min_y = value.iter().map(|mi| mi.pos_y).min().unwrap_or(0);
-          let max_x = value.iter().map(|mi| mi.pos_x + mi.width).max().unwrap_or(0);
-          let max_y = value.iter().map(|mi| mi.pos_y + mi.height).max().unwrap_or(0);
-          log::info!("Combined Screen dimensions:: min_x: {}, min_y: {}, max_x: {}, max_y: {}", min_x, min_y, max_x, max_y);
+        let min_x = value.iter().map(|mi| mi.pos_x).min().unwrap_or(0);
+        let min_y = value.iter().map(|mi| mi.pos_y).min().unwrap_or(0);
+        let max_x = value.iter().map(|mi| mi.pos_x + mi.width).max().unwrap_or(0);
+        let max_y = value.iter().map(|mi| mi.pos_y + mi.height).max().unwrap_or(0);
+        log::info!("Combined Screen dimensions:: min_x: {}, min_y: {}, max_x: {}, max_y: {}", min_x, min_y, max_x, max_y);
 
-          loop {
-              let loop_start = Instant::now(); // Start timing the loop
+        loop {
+            let loop_start = Instant::now(); // Start timing the loop
 
-              let combined_img = combine_screens(&value, combined_monitor_width as u32, combined_monitor_height as u32, thread_num as u32, min_x, min_y).unwrap();
-              
-              let avg_colors_start = Instant::now();
-              let mut avg_colors = calculate_avg_colors(&combined_img, min_x, min_y, max_x, max_y, &CONFIG.leds_array).unwrap();
-              let avg_colors_duration = avg_colors_start.elapsed();
-              log::info!("Thread {}:: Average color calculation took: {:?}", thread_num, avg_colors_duration);
+            let combined_img = combine_screens(&value, combined_monitor_width as u32, combined_monitor_height as u32, thread_num as u32, min_x, min_y).unwrap();
+            
+            let avg_colors_start = Instant::now();
+            let mut avg_colors = calculate_avg_colors(&combined_img, min_x, min_y, max_x, max_y, &CONFIG.leds_array).unwrap();
+            let avg_colors_duration = avg_colors_start.elapsed();
+            log::info!("Thread {}:: Average color calculation took: {:?}", thread_num, avg_colors_duration);
 
-              //let save_start = Instant::now();
-              //match save_screenshot_with_avg_colors(&combined_img, &CONFIG.leds_array, &avg_colors, "combined_img_avg_color.png", min_x, min_y, max_x, max_y) {
-              //    Ok(_) => log::info!("Thread {}:: Combined image saved", thread_num),
-              //    Err(e) => log::error!("Thread {}:: Failed to save combined image: {:?}", thread_num, e),
-              //}
-              //let save_duration = save_start.elapsed();
-              //log::info!("Thread {}:: Save operation took: {:?}", thread_num, save_duration);
+            //let save_start = Instant::now();
+            //match save_screenshot_with_avg_colors(&combined_img, &CONFIG.leds_array, &avg_colors, "combined_img_avg_color.png", min_x, min_y, max_x, max_y) {
+            //    Ok(_) => log::info!("Thread {}:: Combined image saved", thread_num),
+            //    Err(e) => log::error!("Thread {}:: Failed to save combined image: {:?}", thread_num, e),
+            //}
+            //let save_duration = save_start.elapsed();
+            //log::info!("Thread {}:: Save operation took: {:?}", thread_num, save_duration);
 
-              // Sort the average colors by LED index
-              let avg_colors_start = Instant::now();
-              avg_colors.sort_by(|a, b| a.led_index.cmp(&b.led_index));
-              let avg_colors_duration = avg_colors_start.elapsed();
-              log::info!("Thread {}:: Average color sorting took: {:?}", thread_num, avg_colors_duration);
+            // Sort the average colors by LED index
+            let avg_colors_start = Instant::now();
+            avg_colors.sort_by(|a, b| a.led_index.cmp(&b.led_index));
+            let avg_colors_duration = avg_colors_start.elapsed();
+            log::info!("Thread {}:: Average color sorting took: {:?}", thread_num, avg_colors_duration);
 
-              // Send average colors as pixels to WLED
-              log::info!("Thread {}:: Sending average colors as pixels", thread_num);
-              let send_start = Instant::now();
-              let result = arduino::set_pixels("192.168.0.28", avg_colors);
-              let send_duration = send_start.elapsed();
-              match result {
-                  Ok(_) => log::info!("Average colors set as pixels, sending took: {:?}", send_duration),
-                  Err(e) => log::error!("Error in setting average colors as pixels: {}", e),
-              }
+            // Send average colors as pixels to WLED
+            log::info!("Thread {}:: Sending average colors as pixels", thread_num);
+            let send_start = Instant::now();
+            let result = arduino::set_pixels("192.168.0.28", avg_colors);
+            let send_duration = send_start.elapsed();
+            match result {
+                Ok(_) => log::info!("Average colors set as pixels, sending took: {:?}", send_duration),
+                Err(e) => log::error!("Error in setting average colors as pixels: {}", e),
+            }
 
-              let loop_duration = loop_start.elapsed();
-              log::warn!("Thread {}:: Loop iteration took: {:?}", thread_num, loop_duration);
+            let loop_duration = loop_start.elapsed();
+            log::warn!("Thread {}:: Loop iteration took: {:?}", thread_num, loop_duration);
 
-              // Sleep briefly to avoid high CPU usage
-              //thread::sleep(Duration::from_millis(1000));
-          }
+            // Wait till the allocated time for the loop is over
+            let frame_duration = Duration::from_secs_f32(1.0 / target_fps as f32);
+            let remaining = frame_duration.checked_sub(loop_duration).unwrap_or(Duration::from_secs(0));
+            if remaining.as_secs_f32() > 0.0 {
+                thread::sleep(remaining);
+                
+            }
+        }
       });
       handles.push(handle);
   }
