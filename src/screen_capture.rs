@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use crate::config::{Config, LED};
 use crate::hardware_interaction::{FrameData, SlimMonitorInfo};
-use crate::FRAME_MAP;
+use crate::backend::FRAME_MAP;
 
 // Define the Color struct
 #[derive(Debug, Clone)]

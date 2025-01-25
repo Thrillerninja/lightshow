@@ -10,7 +10,7 @@ use windows_capture::{
 
 use winapi::um::winuser::{GetMonitorInfoW, MONITORINFOEXW};
 
-use crate::FRAME_MAP;
+use crate::backend::FRAME_MAP;
 
 // Struct to hold monitor information
 #[derive(Debug, Clone)]
