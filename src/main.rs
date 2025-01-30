@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::sync::mpsc::{self, Sender, Receiver};
@@ -14,6 +15,7 @@ struct SharedState {
     value: i32,
     is_active: bool,
 }
+
 
 fn main() {
     // Initialize the shared state

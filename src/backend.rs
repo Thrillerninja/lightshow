@@ -6,6 +6,8 @@ use crate::logger;
 use crate::screen_capture::{calculate_avg_colors, combine_screens};
 use crate::SharedState;
 use once_cell::sync::Lazy;
+use std::env;
+use std::path::PathBuf;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, mpsc::Receiver},
@@ -21,9 +23,16 @@ use windows_capture::{
 
 pub static FRAME_MAP: Lazy<Arc<Mutex<HashMap<i32, FrameData>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
-
-static CONFIG: Lazy<config::Config> =
-    Lazy::new(|| config::read_config("0current_config.txt").expect("Failed to read config file"));
+    static CONFIG: Lazy<config::Config> = Lazy::new(|| {
+        let exe_path = env::current_exe().expect("Failed to get current exe path");
+        let defaultpath = PathBuf::from(".");
+        let config_path = exe_path
+            .parent()
+            .unwrap_or_else(|| defaultpath.as_path())
+            .join("0current_config.txt");
+        config::read_config(config_path.to_str().unwrap())
+            .expect("Failed to read config file")
+    });
 
 pub fn main_program_start(shared_state: Arc<Mutex<SharedState>>) -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging (optional)

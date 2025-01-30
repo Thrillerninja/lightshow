@@ -9,6 +9,8 @@ use windows::Win32::UI::WindowsAndMessaging::{SetWindowLongW, SetWindowPos, Show
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use crate::backend::main_program_start;
 use crate::{logger, SharedState};
+use winapi::shared::windef::POINT;
+use winapi::um::winuser::{GetCursorPos, ScreenToClient};
 
 static VISIBLE: Mutex<bool> = Mutex::new(false);
 
@@ -19,7 +21,7 @@ pub fn start_ui(shared_state: Arc<Mutex<SharedState>>) -> Result<(), Box<dyn std
     let _tray_icon = gen_tray_icon()?;
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([100.0, 100.0]).with_position([-1000.0, -1000.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([100.0, 100.0]).with_position([100.0, 100.0]),
         vsync: true,
         multisampling: 1,
         depth_buffer: 0,
@@ -36,6 +38,11 @@ pub fn start_ui(shared_state: Arc<Mutex<SharedState>>) -> Result<(), Box<dyn std
             };
 
             let window_handle = HWND(handle.hwnd.into());
+
+            // Hide the window on startup
+            unsafe {
+                ShowWindow(window_handle, SW_HIDE);
+            }
 
             TrayIconEvent::set_event_handler(Some(move |event: TrayIconEvent| {
                 match event {
@@ -58,9 +65,9 @@ pub fn start_ui(shared_state: Arc<Mutex<SharedState>>) -> Result<(), Box<dyn std
                                     window_handle,
                                     HWND_TOPMOST,
                                     position.x as i32 - 60,
-                                    position.y as i32 - 10 - 100,
+                                    position.y as i32 - 10 - 120,
                                     80,
-                                    100,
+                                    120,
                                     windows::Win32::UI::WindowsAndMessaging::SET_WINDOW_POS_FLAGS(0),
                                 );
                                 ShowWindow(window_handle, SW_SHOWDEFAULT);
@@ -71,10 +78,17 @@ pub fn start_ui(shared_state: Arc<Mutex<SharedState>>) -> Result<(), Box<dyn std
                     TrayIconEvent::Leave { .. } => {
                         let mut visible = VISIBLE.lock().unwrap();
                         if *visible {
+                            let mut cursor_pos = POINT { x: 0, y: 0 };
                             unsafe {
-                                ShowWindow(window_handle, SW_HIDE);
+                                GetCursorPos(&mut cursor_pos);
+                                ScreenToClient(window_handle.0 as *mut _, &mut cursor_pos);
                             }
-                            *visible = false;
+                            if cursor_pos.x < 0 || cursor_pos.x > 80 || cursor_pos.y < 0 || cursor_pos.y > 120 {
+                                unsafe {
+                                    ShowWindow(window_handle, SW_HIDE);
+                                }
+                                *visible = false;
+                            }
                         }
                     }
                     _ => {}
@@ -88,6 +102,13 @@ pub fn start_ui(shared_state: Arc<Mutex<SharedState>>) -> Result<(), Box<dyn std
                     let mut state = shared_state.lock().unwrap();
                     state.is_active = true; // Activate
                     drop(state); // Release the lock promptly
+
+                    // Ensure the window closes after clicking the button and leaving the window
+                    let mut visible = VISIBLE.lock().unwrap();
+                    *visible = false;
+                    unsafe {
+                        ShowWindow(window_handle, SW_HIDE);
+                    }
                 }
             };
             let stop_button_handler = {
@@ -97,6 +118,13 @@ pub fn start_ui(shared_state: Arc<Mutex<SharedState>>) -> Result<(), Box<dyn std
                     let mut state = shared_state.lock().unwrap();
                     state.is_active = false; // Deactivate
                     drop(state); // Release the lock promptly
+
+                    // Ensure the window closes after clicking the button and leaving the window
+                    let mut visible = VISIBLE.lock().unwrap();
+                    *visible = false;
+                    unsafe {
+                        ShowWindow(window_handle, SW_HIDE);
+                    }
                 }
             };
             Box::new(MyApp {
